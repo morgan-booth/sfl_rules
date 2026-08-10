@@ -43,6 +43,7 @@
   .chev { transition: transform .2s; }
   details.acc[open] > summary .chev { transform: rotate(180deg); }
   #scrollHint { transition: opacity .25s; }
+  #suggestDivChev { transition: transform .2s; }
   .chat-scroll::-webkit-scrollbar{width:8px} .chat-scroll::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
   .fade-in { animation: fade .25s ease both; } @keyframes fade { from{opacity:0;transform:translateY(4px)} to{opacity:1} }
 </style>
@@ -163,7 +164,13 @@
         </div>
         <div>
           <label class="block text-sm font-semibold mb-1">Applies to <span class="text-brand">*</span></label>
-          <div id="suggestDivs" class="rounded-xl border border-slate-300 p-3 space-y-2"></div>
+          <div class="relative" id="suggestDivWrap">
+            <button type="button" id="suggestDivToggle" class="w-full flex items-center justify-between gap-2 rounded-xl border border-slate-300 px-4 py-3 text-left focus:outline-none focus:ring-2 focus:ring-brand/40">
+              <span id="suggestDivSummary" class="text-sm text-slate-400 truncate">Select division(s)</span>
+              <svg id="suggestDivChev" class="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div id="suggestDivs" class="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg p-2 space-y-0.5" hidden></div>
+          </div>
         </div>
         <div>
           <label class="block text-sm font-semibold mb-1">Suggested rule or change <span class="text-brand">*</span></label>
@@ -441,13 +448,23 @@
   }
 
   /* ---------- SUGGEST ---------- */
+  function updateSuggestSummary() {
+    const wrap = $("#suggestDivs"), sum = $("#suggestDivSummary");
+    if (!wrap || !sum) return;
+    const checked = $$(".divchk", wrap).filter(c => c.checked).map(c => c.value);
+    if (!checked.length) { sum.textContent = "Select division(s)"; sum.className = "text-sm text-slate-400 truncate"; return; }
+    sum.className = "text-sm text-slate-700 truncate";
+    sum.textContent = checked.includes("all")
+      ? "All divisions (universal rule)"
+      : checked.map(v => R.divisions[v].short).join(", ");
+  }
   function renderSuggestDivs() {
     const wrap = $("#suggestDivs");
     if (!wrap) return;
     const opts = [{ v: "all", label: "All divisions (universal rule)" }]
       .concat(R.order.map(id => ({ v: id, label: R.divisions[id].short })));
     wrap.innerHTML = opts.map(o =>
-      `<label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+      `<label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer px-2 py-1.5 rounded-lg hover:bg-slate-50">
          <input type="checkbox" class="divchk w-4 h-4 accent-brand" value="${o.v}" ${o.v === state.division ? "checked" : ""}>
          ${esc(o.label)}
        </label>`).join("");
@@ -457,8 +474,21 @@
       } else if (cb.value !== "all" && cb.checked) {
         const all = wrap.querySelector('.divchk[value="all"]'); if (all) all.checked = false;
       }
+      updateSuggestSummary();
     }));
+    updateSuggestSummary();
   }
+  // Dropdown open/close (wired once).
+  $("#suggestDivToggle").addEventListener("click", () => {
+    const menu = $("#suggestDivs"); menu.hidden = !menu.hidden;
+    $("#suggestDivChev").style.transform = menu.hidden ? "" : "rotate(180deg)";
+  });
+  document.addEventListener("click", e => {
+    const wrap = $("#suggestDivWrap"), menu = $("#suggestDivs");
+    if (menu && wrap && !menu.hidden && !wrap.contains(e.target)) {
+      menu.hidden = true; $("#suggestDivChev").style.transform = "";
+    }
+  });
 
   $("#suggestForm").addEventListener("submit", async e => {
     e.preventDefault();

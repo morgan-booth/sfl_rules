@@ -101,7 +101,6 @@
       <div id="step2" hidden>
         <button id="backStep" class="text-xs text-slate-500 hover:text-brand mb-3">&larr; Back</button>
         <div class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Step 2 — Which flag division?</div>
-        <p class="text-sm text-slate-600 mb-3">Are you looking for <strong>Freshman</strong> (the youngest group, 1st–2nd grade) or the <strong>older</strong> divisions?</p>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <button data-div="flag-freshman" class="pickdiv border-2 border-slate-200 hover:border-brand rounded-xl p-5 text-left transition">
             <div class="font-head text-xl font-bold text-navy">Freshman</div>
@@ -152,9 +151,6 @@
       <svg class="absolute left-3 top-3.5 w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3m1.3-5.4a6.7 6.7 0 11-13.4 0 6.7 6.7 0 0113.4 0z"/></svg>
     </div>
     <div id="searchInfo" class="text-sm text-slate-500 mb-2" hidden></div>
-    <div id="scrollHint" class="flex justify-center pb-1 pt-0.5">
-      <svg class="w-5 h-5 text-navy/40 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/></svg>
-    </div>
     <div id="rulesTOC" class="space-y-3"></div>
   </section>
 
@@ -194,6 +190,13 @@
 <footer class="text-center text-xs text-slate-400 py-6">
   SFL Rules · Southwest Football League · <span id="rulesUpdated"></span>
 </footer>
+
+<!-- Floating scroll cue: only shown when the page overflows and you're not at the bottom -->
+<div id="scrollHint" class="fixed left-1/2 -translate-x-1/2 bottom-4 z-20 pointer-events-none" style="opacity:0">
+  <div class="bg-navy-800/90 text-white rounded-full w-9 h-9 flex items-center justify-center shadow-lg animate-bounce">
+    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/></svg>
+  </div>
+</div>
 
 <script src="/rules.js"></script>
 <script>
@@ -244,6 +247,7 @@
     $("#panel-rules").hidden = tab !== "rules";
     $("#panel-suggest").hidden = tab !== "suggest";
     if (tab === "ask") setTimeout(() => $("#chatInput").focus(), 30);
+    setTimeout(updateScrollHint, 0);
   }
 
   /* ---------- RULES LOOKUP ---------- */
@@ -307,7 +311,7 @@
       if (query && matched.length === 0) return "";
       const list = query ? matched : g.sections;
       const badge = query ? `${matched.length}/${g.sections.length}` : String(g.sections.length);
-      return `<details class="rule-group acc border border-slate-200 rounded-xl bg-white overflow-hidden shadow-sm" ${query ? "open" : ""}>
+      return `<details class="rule-group acc border border-slate-200 rounded-xl bg-white overflow-hidden shadow-sm" data-group="${esc(g.title.toLowerCase())}" ${query ? "open" : ""}>
         <summary class="cursor-pointer px-4 py-3 flex items-center gap-3 bg-navy-800 text-white hover:bg-navy-700 transition">
           <span class="font-head font-semibold tracking-wide flex-1">${esc(g.title)}</span>
           <span class="text-[11px] bg-white/15 rounded-full px-2 py-0.5">${badge}</span>
@@ -317,7 +321,6 @@
       </details>`;
     }).join("");
     $("#rulesTOC").innerHTML = html || `<p class="text-slate-500 text-sm">No rules matched “${esc(q)}”.</p>`;
-    const hint = $("#scrollHint"); if (hint) hint.hidden = !!query;
     const info = $("#searchInfo");
     if (query) {
       info.hidden = false;
@@ -325,6 +328,7 @@
       $$(".rule-sec", $("#rulesTOC")).forEach(d => { d.open = true; }); // expand matched sections too
       highlight($("#rulesTOC"), query);
     } else { info.hidden = true; }
+    setTimeout(updateScrollHint, 0);
   }
 
   function highlight(root, q) {
@@ -356,7 +360,29 @@
   }
 
   function fmt(t) {
-    return esc(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>");
+    let s = esc(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    // {{SECTION HEADING}} -> tappable link into the Rules tab
+    s = s.replace(/\{\{\s*(.+?)\s*\}\}/g, (m, title) =>
+      `<button type="button" class="cite text-brand font-semibold underline decoration-brand/40 hover:decoration-brand">${title}</button>`);
+    return s.replace(/\n/g, "<br>");
+  }
+  // Jump from a chat citation to the matching rule in the Rules tab.
+  function openRuleSection(title) {
+    const t = (title || "").trim().toLowerCase();
+    setTab("rules");
+    const search = $("#ruleSearch"); if (search) search.value = "";
+    renderTOC("");
+    let target = null, cat = null;
+    $$("#rulesTOC .rule-group").forEach(gd => {
+      if (gd.dataset.group === t) cat = cat || gd;
+      $$(".rule-sec", gd).forEach(sd => { if (sd.dataset.title === t) { target = sd; cat = gd; } });
+    });
+    if (cat) cat.open = true;
+    if (target) target.open = true;
+    setTimeout(() => {
+      const el = target || cat;
+      if (el) el.scrollIntoView({ behavior: "smooth", block: target ? "center" : "start" });
+    }, 90);
   }
   function renderChat() {
     const box = $("#chatScroll");
@@ -368,16 +394,20 @@
     }
     box.innerHTML = state.chat.map(m => {
       if (m.role === "user") {
-        return `<div class="flex justify-end"><div class="bg-navy-800 text-white rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] fade-in">${fmt(m.content)}</div></div>`;
+        return `<div class="flex justify-end"><div class="bg-navy-800 text-white rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] text-sm leading-relaxed fade-in">${fmt(m.content)}</div></div>`;
       }
       const err = m.error ? " border border-amber-300" : "";
-      return `<div class="flex justify-start"><div class="bg-white${err} shadow-sm rounded-2xl rounded-bl-sm px-4 py-2.5 max-w-[90%] text-slate-800 fade-in">${m.typing ? typingDots() : fmt(m.content)}</div></div>`;
+      return `<div class="flex justify-start"><div class="bg-white${err} shadow-sm rounded-2xl rounded-bl-sm px-4 py-2.5 max-w-[90%] text-sm leading-relaxed text-slate-800 fade-in">${m.typing ? typingDots() : fmt(m.content)}</div></div>`;
     }).join("");
     box.scrollTop = box.scrollHeight;
   }
   const typingDots = () => `<span class="inline-flex gap-1"><span class="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style="animation-delay:0ms"></span><span class="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style="animation-delay:120ms"></span><span class="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style="animation-delay:240ms"></span></span>`;
 
   $("#chatForm").addEventListener("submit", e => { e.preventDefault(); sendChat(); });
+  $("#chatScroll").addEventListener("click", e => {
+    const c = e.target.closest(".cite");
+    if (c) { e.preventDefault(); openRuleSection(c.textContent); }
+  });
 
   async function sendChat() {
     const input = $("#chatInput");
@@ -443,11 +473,19 @@
     } finally { btn.disabled = false; }
   });
 
-  // Fade the scroll hint once the user starts scrolling the rules list.
-  window.addEventListener("scroll", () => {
+  // Floating scroll cue: visible only on the rules tab when the page actually
+  // overflows and we're not already near the bottom.
+  function updateScrollHint() {
     const h = $("#scrollHint");
-    if (h) h.style.opacity = window.scrollY > 30 ? "0" : "";
-  }, { passive: true });
+    if (!h) return;
+    const doc = document.documentElement;
+    const canScroll = doc.scrollHeight - window.innerHeight > 24;
+    const atBottom = window.scrollY + window.innerHeight >= doc.scrollHeight - 24;
+    h.style.opacity = (state.tab === "rules" && canScroll && !atBottom) ? "1" : "0";
+  }
+  window.addEventListener("scroll", updateScrollHint, { passive: true });
+  window.addEventListener("resize", updateScrollHint);
+  document.addEventListener("toggle", updateScrollHint, true); // any accordion open/close changes height
 
   // initial
   renderChat();

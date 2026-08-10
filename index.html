@@ -42,6 +42,7 @@
   details.acc > summary::-webkit-details-marker { display:none; }
   .chev { transition: transform .2s; }
   details.acc[open] > summary .chev { transform: rotate(180deg); }
+  #scrollHint { transition: opacity .25s; }
   .chat-scroll::-webkit-scrollbar{width:8px} .chat-scroll::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
   .fade-in { animation: fade .25s ease both; } @keyframes fade { from{opacity:0;transform:translateY(4px)} to{opacity:1} }
 </style>
@@ -71,8 +72,9 @@
 </header>
 
 <!-- ================= ENTRY OVERLAY ================= -->
-<div id="entry" class="fixed inset-0 z-40 bg-navy-900 flex items-center justify-center p-4">
-  <div class="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden fade-in">
+<div id="entry" class="fixed inset-0 z-40 bg-gradient-to-b from-navy-900 to-navy-800 flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-white rounded-2xl shadow-[0_25px_70px_-15px_rgba(0,0,0,0.75)] ring-1 ring-white/25 overflow-hidden fade-in">
+    <div class="h-1.5 bg-gradient-to-r from-brand via-gold to-brand"></div>
     <div class="bg-navy-800 text-white px-6 py-7 text-center">
       <img src="https://d2jqoimos5um40.cloudfront.net/site_1296/83a31.png" alt="Southwest Football League"
            class="h-24 w-auto mx-auto mb-4 bg-white rounded-2xl p-3 shadow-md"
@@ -143,13 +145,16 @@
 
   <!-- ---- RULES ---- -->
   <section id="panel-rules" class="tabpanel" hidden>
-    <div id="divIntro" class="mb-4"></div>
-    <div class="relative mb-4">
+    <div id="divIntro" class="mb-3"></div>
+    <div class="relative mb-2">
       <input id="ruleSearch" placeholder="Search the rules…"
         class="w-full rounded-xl border border-slate-300 pl-10 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand/40" />
       <svg class="absolute left-3 top-3.5 w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3m1.3-5.4a6.7 6.7 0 11-13.4 0 6.7 6.7 0 0113.4 0z"/></svg>
     </div>
     <div id="searchInfo" class="text-sm text-slate-500 mb-2" hidden></div>
+    <div id="scrollHint" class="flex justify-center pb-1 pt-0.5">
+      <svg class="w-5 h-5 text-navy/40 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/></svg>
+    </div>
     <div id="rulesTOC" class="space-y-3"></div>
   </section>
 
@@ -244,17 +249,27 @@
   /* ---------- RULES LOOKUP ---------- */
   function renderRules() {
     const div = R.divisions[state.division];
-    // intro + freshman provisions callout
-    let intro = `<h2 class="font-head text-2xl font-bold text-navy">${esc(div.label)}</h2>
-      <p class="text-sm text-slate-600 mt-1">${esc(div.intro)}</p>`;
+    // Compact one-line title; for freshman, fold the intro + provisions into one
+    // collapsed "exceptions" accordion so search + sections sit higher.
+    let html = `<h2 class="font-head text-base sm:text-xl font-bold text-navy leading-snug">${esc(div.label)}</h2>`;
     if (div.provisions) {
-      intro += `<div class="mt-3 border-l-4 border-gold bg-amber-50 rounded-r-lg p-4">
-        <div class="font-head font-bold text-navy uppercase text-sm tracking-wide mb-2">Freshman Division provisions</div>
-        <ul class="space-y-1 text-sm">` +
-        div.provisions.map(p => `<li><span class="font-semibold text-navy">${esc(p.label)}:</span> ${esc(p.text)}</li>`).join("") +
-        `</ul></div>`;
+      html += `<details class="acc mt-2 border-l-4 border-gold bg-amber-50 rounded-r-lg overflow-hidden">
+        <summary class="cursor-pointer px-3 py-2 flex items-center gap-2">
+          <span class="font-head font-semibold text-navy text-sm flex-1">Freshman Division exceptions</span>
+          <span class="text-[11px] bg-gold/25 text-navy rounded-full px-2 py-0.5">${div.provisions.length}</span>
+          <span class="chev text-navy/50 shrink-0">▾</span>
+        </summary>
+        <div class="px-3 pb-3">
+          <p class="text-xs text-slate-600 mb-2">${esc(div.intro)}</p>
+          <ul class="space-y-1 text-sm">` +
+          div.provisions.map(p => `<li><span class="font-semibold text-navy">${esc(p.label)}:</span> ${esc(p.text)}</li>`).join("") +
+          `</ul>
+        </div>
+      </details>`;
+    } else {
+      html += `<p class="text-sm text-slate-600 mt-1">${esc(div.intro)}</p>`;
     }
-    $("#divIntro").innerHTML = intro;
+    $("#divIntro").innerHTML = html;
     renderTOC("");
   }
 
@@ -302,6 +317,7 @@
       </details>`;
     }).join("");
     $("#rulesTOC").innerHTML = html || `<p class="text-slate-500 text-sm">No rules matched “${esc(q)}”.</p>`;
+    const hint = $("#scrollHint"); if (hint) hint.hidden = !!query;
     const info = $("#searchInfo");
     if (query) {
       info.hidden = false;
@@ -426,6 +442,12 @@
       msg.textContent = "Network error — please try again.";
     } finally { btn.disabled = false; }
   });
+
+  // Fade the scroll hint once the user starts scrolling the rules list.
+  window.addEventListener("scroll", () => {
+    const h = $("#scrollHint");
+    if (h) h.style.opacity = window.scrollY > 30 ? "0" : "";
+  }, { passive: true });
 
   // initial
   renderChat();

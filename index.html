@@ -29,6 +29,9 @@
 </script>
 <style>
   :root { --navy:#0B2A4A; --brand:#C8102E; --gold:#F5A623; }
+  /* Ensure the [hidden] attribute always wins over Tailwind display utilities
+     (e.g. .flex on the entry overlay) so panels/overlays hide reliably. */
+  [hidden] { display: none !important; }
   body { font-family: 'Inter', system-ui, sans-serif; }
   h1,h2,h3,.font-head { font-family:'Oswald',system-ui,sans-serif; letter-spacing:.02em; }
   .rule-body { white-space: pre-wrap; overflow-wrap:anywhere; }

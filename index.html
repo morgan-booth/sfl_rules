@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SFL Rules — Southwest Football League</title>
+<meta name="description" content="Look up SFL football rules, ask questions, and suggest new rules." />
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<script>
+  if (window.tailwind) tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          /* SFL brand — swap these hex values for the league's exact colors */
+          navy:  { DEFAULT: "#0B2A4A", 700: "#0f335a", 800: "#0a2340", 900: "#071a30" },
+          brand: { DEFAULT: "#C8102E", dark: "#a30d26" },   /* red */
+          gold:  { DEFAULT: "#F5A623", dark: "#d98c0f" },
+        },
+        fontFamily: {
+          head: ['Oswald', 'system-ui', 'sans-serif'],
+          body: ['Inter', 'system-ui', 'sans-serif'],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  :root { --navy:#0B2A4A; --brand:#C8102E; --gold:#F5A623; }
+  body { font-family: 'Inter', system-ui, sans-serif; }
+  h1,h2,h3,.font-head { font-family:'Oswald',system-ui,sans-serif; letter-spacing:.02em; }
+  .rule-body { white-space: pre-wrap; overflow-wrap:anywhere; }
+  .tab-underline { box-shadow: inset 0 -3px 0 0 var(--brand); }
+  mark { background: #ffe39b; color:inherit; padding:0 1px; border-radius:2px; }
+  .chat-scroll::-webkit-scrollbar{width:8px} .chat-scroll::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
+  .fade-in { animation: fade .25s ease both; } @keyframes fade { from{opacity:0;transform:translateY(4px)} to{opacity:1} }
+</style>
+</head>
+<body class="bg-slate-100 text-navy-900 min-h-screen flex flex-col">
+
+<!-- ================= HEADER ================= -->
+<header class="bg-navy-800 text-white shadow-lg sticky top-0 z-30">
+  <div class="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
+    <div class="shrink-0">
+      <!-- Official SFL logo; falls back to a shield mark if the image can't load -->
+      <img src="https://d2jqoimos5um40.cloudfront.net/site_1296/83a31.png" alt="Southwest Football League"
+           class="h-10 w-auto bg-white/95 rounded p-0.5"
+           onerror="this.outerHTML='&lt;svg width=34 height=40 viewBox=\'0 0 34 40\'&gt;&lt;path d=\'M17 1 L33 6 V20 C33 30 26 36 17 39 C8 36 1 30 1 20 V6 Z\' fill=\'#0B2A4A\' stroke=\'#F5A623\' stroke-width=2/&gt;&lt;text x=17 y=25 text-anchor=middle font-family=Oswald font-size=12 font-weight=700 fill=#fff&gt;SFL&lt;/text&gt;&lt;/svg&gt;'">
+    </div>
+    <div class="leading-tight">
+      <div class="font-head text-xl font-bold tracking-wide">SFL RULES</div>
+      <div class="text-[11px] uppercase tracking-widest text-gold">Southwest Football League</div>
+    </div>
+    <div class="ml-auto flex items-center gap-2" id="divBadgeWrap" hidden>
+      <span id="divBadge" class="hidden sm:inline text-xs bg-navy-900/60 border border-white/15 rounded-full px-3 py-1"></span>
+      <button id="changeDiv" class="text-xs font-semibold bg-brand hover:bg-brand-dark transition rounded-full px-3 py-1.5">
+        Change division
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ================= ENTRY OVERLAY ================= -->
+<div id="entry" class="fixed inset-0 z-40 bg-navy-900/95 backdrop-blur flex items-center justify-center p-4">
+  <div class="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden fade-in">
+    <div class="bg-navy-800 text-white px-6 py-5">
+      <div class="font-head text-2xl font-bold">Welcome to the SFL Rulebook</div>
+      <p class="text-sm text-white/80 mt-1">Pick your league to get started.</p>
+    </div>
+    <div class="p-6">
+      <!-- Step 1: format -->
+      <div id="step1">
+        <div class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Step 1 — Choose format</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button data-format="flag" class="pick group border-2 border-slate-200 hover:border-brand rounded-xl p-5 text-left transition">
+            <div class="font-head text-xl font-bold text-navy">Flag Football</div>
+            <div class="text-sm text-slate-500 mt-1">Grades 1–8 · non-contact</div>
+          </button>
+          <button data-format="tackle" class="pick group border-2 border-slate-200 hover:border-brand rounded-xl p-5 text-left transition">
+            <div class="font-head text-xl font-bold text-navy">Tackle Football</div>
+            <div class="text-sm text-slate-500 mt-1">Sophomore 6-man</div>
+          </button>
+        </div>
+      </div>
+      <!-- Step 2: flag age -->
+      <div id="step2" hidden>
+        <button id="backStep" class="text-xs text-slate-500 hover:text-brand mb-3">&larr; Back</button>
+        <div class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Step 2 — Which flag division?</div>
+        <p class="text-sm text-slate-600 mb-3">Are you looking for <strong>Freshman</strong> (the youngest group, 1st–2nd grade) or the <strong>older</strong> divisions?</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button data-div="flag-freshman" class="pickdiv border-2 border-slate-200 hover:border-brand rounded-xl p-5 text-left transition">
+            <div class="font-head text-xl font-bold text-navy">Freshman</div>
+            <div class="text-sm text-slate-500 mt-1">1st–2nd grade · special provisions apply</div>
+          </button>
+          <button data-div="flag-older" class="pickdiv border-2 border-slate-200 hover:border-brand rounded-xl p-5 text-left transition">
+            <div class="font-head text-xl font-bold text-navy">Older Divisions</div>
+            <div class="text-sm text-slate-500 mt-1">Sophomore · Junior · Senior</div>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= TABS ================= -->
+<nav id="tabs" class="bg-white border-b border-slate-200 sticky top-[60px] z-20" hidden>
+  <div class="max-w-5xl mx-auto px-2 flex">
+    <button data-tab="ask"     class="tabbtn flex-1 font-head font-semibold uppercase tracking-wide text-sm py-3 text-slate-500">Ask</button>
+    <button data-tab="rules"   class="tabbtn flex-1 font-head font-semibold uppercase tracking-wide text-sm py-3 text-slate-500">Rules</button>
+    <button data-tab="suggest" class="tabbtn flex-1 font-head font-semibold uppercase tracking-wide text-sm py-3 text-slate-500">Suggest</button>
+  </div>
+</nav>
+
+<!-- ================= MAIN ================= -->
+<main class="flex-1 max-w-5xl w-full mx-auto px-4 py-5" id="main" hidden>
+
+  <!-- ---- ASK ---- -->
+  <section id="panel-ask" class="tabpanel">
+    <div class="bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-lg px-3 py-2 mb-3">
+      Answers are AI-generated from the official rulebook for quick guidance. For any dispute, the printed SFL rulebook and on-field officials are the final word.
+    </div>
+    <div id="chatScroll" class="chat-scroll space-y-4 overflow-y-auto pb-2" style="min-height:40vh;max-height:60vh"></div>
+    <form id="chatForm" class="mt-3 flex gap-2">
+      <input id="chatInput" autocomplete="off" placeholder="Ask about a rule — e.g. “Can the QB run?”"
+        class="flex-1 rounded-xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand/40" />
+      <button id="chatSend" class="bg-brand hover:bg-brand-dark text-white font-semibold rounded-xl px-5 transition disabled:opacity-50">Send</button>
+    </form>
+    <div id="chatSuggests" class="mt-3 flex flex-wrap gap-2"></div>
+  </section>
+
+  <!-- ---- RULES ---- -->
+  <section id="panel-rules" class="tabpanel" hidden>
+    <div id="divIntro" class="mb-4"></div>
+    <div class="relative mb-4">
+      <input id="ruleSearch" placeholder="Search the rules…"
+        class="w-full rounded-xl border border-slate-300 pl-10 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand/40" />
+      <svg class="absolute left-3 top-3.5 w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3m1.3-5.4a6.7 6.7 0 11-13.4 0 6.7 6.7 0 0113.4 0z"/></svg>
+    </div>
+    <div id="searchInfo" class="text-sm text-slate-500 mb-2" hidden></div>
+    <div id="rulesTOC" class="space-y-5"></div>
+  </section>
+
+  <!-- ---- SUGGEST ---- -->
+  <section id="panel-suggest" class="tabpanel" hidden>
+    <div class="max-w-xl">
+      <h2 class="font-head text-2xl font-bold text-navy mb-1">Suggest a rule</h2>
+      <p class="text-sm text-slate-600 mb-4">Have an idea to improve the rules? Send it to the league board for review.</p>
+      <form id="suggestForm" class="space-y-4">
+        <div>
+          <label class="block text-sm font-semibold mb-1">Your name <span class="text-brand">*</span></label>
+          <input name="name" required class="w-full rounded-xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand/40" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">Email <span class="text-slate-400 font-normal">(optional, so the league can reply)</span></label>
+          <input name="email" type="email" class="w-full rounded-xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand/40" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">Division</label>
+          <input id="suggestDiv" readonly class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">Suggested rule or change <span class="text-brand">*</span></label>
+          <textarea name="suggestion" required rows="4" class="w-full rounded-xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand/40"></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">Why? <span class="text-slate-400 font-normal">(optional)</span></label>
+          <textarea name="rationale" rows="3" class="w-full rounded-xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand/40"></textarea>
+        </div>
+        <button id="suggestSend" class="bg-brand hover:bg-brand-dark text-white font-semibold rounded-xl px-6 py-3 transition disabled:opacity-50">Send suggestion</button>
+        <div id="suggestMsg" class="text-sm" role="status"></div>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer class="text-center text-xs text-slate-400 py-6">
+  SFL Rules · Southwest Football League · <span id="rulesUpdated"></span>
+</footer>
+
+<script src="/rules.js"></script>
+<script>
+(function () {
+  const R = window.SFL_RULES;
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+
+  const state = { division: null, tab: "ask", chat: [], sending: false, pendingFormat: null };
+  $("#rulesUpdated").textContent = R.updated || "";
+
+  /* ---------- ENTRY ---------- */
+  $$(".pick").forEach(b => b.addEventListener("click", () => {
+    const fmt = b.dataset.format;
+    if (fmt === "tackle") { setDivision("tackle-sophomore"); }
+    else { $("#step1").hidden = true; $("#step2").hidden = false; }
+  }));
+  $("#backStep").addEventListener("click", () => { $("#step2").hidden = true; $("#step1").hidden = false; });
+  $$(".pickdiv").forEach(b => b.addEventListener("click", () => setDivision(b.dataset.div)));
+  $("#changeDiv").addEventListener("click", () => {
+    $("#entry").hidden = false; $("#step2").hidden = true; $("#step1").hidden = false;
+  });
+
+  function setDivision(id) {
+    state.division = id;
+    const div = R.divisions[id];
+    $("#entry").hidden = true;
+    $("#tabs").hidden = false; $("#main").hidden = false; $("#divBadgeWrap").hidden = false;
+    $("#divBadge").textContent = div.label;
+    $("#suggestDiv").value = div.label;
+    renderRules();
+    // reset chat for the new division
+    state.chat = []; renderChat(); renderChatSuggests();
+    setTab(state.tab);
+  }
+
+  /* ---------- TABS ---------- */
+  $$(".tabbtn").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
+  function setTab(tab) {
+    state.tab = tab;
+    $$(".tabbtn").forEach(b => {
+      const on = b.dataset.tab === tab;
+      b.classList.toggle("text-navy", on); b.classList.toggle("text-slate-500", !on);
+      b.classList.toggle("tab-underline", on);
+    });
+    $("#panel-ask").hidden = tab !== "ask";
+    $("#panel-rules").hidden = tab !== "rules";
+    $("#panel-suggest").hidden = tab !== "suggest";
+    if (tab === "ask") setTimeout(() => $("#chatInput").focus(), 30);
+  }
+
+  /* ---------- RULES LOOKUP ---------- */
+  function renderRules() {
+    const div = R.divisions[state.division];
+    // intro + freshman provisions callout
+    let intro = `<h2 class="font-head text-2xl font-bold text-navy">${esc(div.label)}</h2>
+      <p class="text-sm text-slate-600 mt-1">${esc(div.intro)}</p>`;
+    if (div.provisions) {
+      intro += `<div class="mt-3 border-l-4 border-gold bg-amber-50 rounded-r-lg p-4">
+        <div class="font-head font-bold text-navy uppercase text-sm tracking-wide mb-2">Freshman Division provisions</div>
+        <ul class="space-y-1 text-sm">` +
+        div.provisions.map(p => `<li><span class="font-semibold text-navy">${esc(p.label)}:</span> ${esc(p.text)}</li>`).join("") +
+        `</ul></div>`;
+    }
+    $("#divIntro").innerHTML = intro;
+    renderTOC("");
+  }
+
+  function sectionHTML(sec) {
+    let body;
+    if (sec.rows && sec.rows.length) {
+      body = `<div class="mt-2 divide-y divide-slate-100 border border-slate-200 rounded-lg overflow-hidden">` +
+        sec.rows.map(r => `<div class="grid grid-cols-5 gap-2 px-3 py-2 text-sm">
+            <div class="col-span-2 font-semibold text-navy">${esc(r.label)}</div>
+            <div class="col-span-3 text-slate-700">${esc(r.value)}</div></div>`).join("") +
+        `</div>`;
+    } else {
+      body = `<div class="rule-body mt-1 text-sm text-slate-700 leading-relaxed">${esc(sec.text)}</div>`;
+    }
+    return `<details class="rule-sec group border border-slate-200 rounded-lg bg-white" data-title="${esc(sec.title.toLowerCase())}" data-text="${esc(sec.text.toLowerCase())}">
+      <summary class="cursor-pointer list-none px-4 py-3 flex items-center justify-between">
+        <span class="font-head font-semibold text-navy">${esc(sec.title)}</span>
+        <span class="text-slate-400 group-open:rotate-180 transition">▾</span>
+      </summary>
+      <div class="px-4 pb-4">${body}</div>
+    </details>`;
+  }
+
+  function renderTOC(q) {
+    const div = R.divisions[state.division];
+    const query = (q || "").trim().toLowerCase();
+    let shown = 0, total = 0;
+    const html = div.groups.map(g => {
+      const secs = g.sections.map(s => {
+        total++;
+        const hit = !query || s.title.toLowerCase().includes(query) || s.text.toLowerCase().includes(query);
+        if (hit) shown++;
+        return { s, hit };
+      });
+      const visible = secs.filter(x => x.hit);
+      if (query && visible.length === 0) return "";
+      return `<div>
+        <div class="font-head text-xs font-bold uppercase tracking-widest text-brand mb-2">${esc(g.title)}</div>
+        <div class="space-y-2">${visible.map(x => sectionHTML(x.s)).join("")}</div>
+      </div>`;
+    }).join("");
+    $("#rulesTOC").innerHTML = html || `<p class="text-slate-500 text-sm">No rules matched “${esc(q)}”.</p>`;
+    const info = $("#searchInfo");
+    if (query) { info.hidden = false; info.textContent = `${shown} section${shown===1?"":"s"} match “${q}”.`;
+      // auto-open matches and highlight
+      $$(".rule-sec", $("#rulesTOC")).forEach(d => { d.open = true; });
+      highlight($("#rulesTOC"), query);
+    } else { info.hidden = true; }
+  }
+
+  function highlight(root, q) {
+    const rx = new RegExp("(" + q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "ig");
+    $$(".rule-body, summary span, .text-slate-700", root).forEach(el => {
+      if (el.children.length) return;
+      el.innerHTML = el.textContent.replace(rx, "<mark>$1</mark>");
+    });
+  }
+
+  let searchT;
+  $("#ruleSearch").addEventListener("input", e => {
+    clearTimeout(searchT);
+    searchT = setTimeout(() => renderTOC(e.target.value), 120);
+  });
+
+  /* ---------- CHAT ---------- */
+  const SUGGESTIONS = {
+    "flag-older": ["Can the quarterback run?", "How does blitzing work?", "What is the no-run zone?", "How many points is a PAT?"],
+    "flag-freshman": ["Is blitzing allowed?", "How long is the pass clock?", "Is there a no-run zone?", "What's the field width?"],
+    "tackle-sophomore": ["How long are quarters?", "How do kickoffs work?", "What's the mercy rule?", "How many points is a field goal?"],
+  };
+  function renderChatSuggests() {
+    const wrap = $("#chatSuggests");
+    if (state.chat.length) { wrap.innerHTML = ""; return; }
+    wrap.innerHTML = (SUGGESTIONS[state.division] || []).map(t =>
+      `<button class="chip text-xs border border-slate-300 hover:border-brand hover:text-brand rounded-full px-3 py-1.5 transition">${esc(t)}</button>`).join("");
+    $$(".chip", wrap).forEach(b => b.addEventListener("click", () => { $("#chatInput").value = b.textContent; sendChat(); }));
+  }
+
+  function fmt(t) {
+    return esc(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>");
+  }
+  function renderChat() {
+    const box = $("#chatScroll");
+    if (!state.division) { box.innerHTML = ""; return; }
+    if (!state.chat.length) {
+      box.innerHTML = `<div class="text-center text-slate-400 text-sm py-10">
+        Ask anything about the <strong>${esc(R.divisions[state.division].label)}</strong> rules.</div>`;
+      return;
+    }
+    box.innerHTML = state.chat.map(m => {
+      if (m.role === "user") {
+        return `<div class="flex justify-end"><div class="bg-navy-800 text-white rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] fade-in">${fmt(m.content)}</div></div>`;
+      }
+      const err = m.error ? " border border-amber-300" : "";
+      return `<div class="flex justify-start"><div class="bg-white${err} shadow-sm rounded-2xl rounded-bl-sm px-4 py-2.5 max-w-[90%] text-slate-800 fade-in">${m.typing ? typingDots() : fmt(m.content)}</div></div>`;
+    }).join("");
+    box.scrollTop = box.scrollHeight;
+  }
+  const typingDots = () => `<span class="inline-flex gap-1"><span class="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style="animation-delay:0ms"></span><span class="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style="animation-delay:120ms"></span><span class="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style="animation-delay:240ms"></span></span>`;
+
+  $("#chatForm").addEventListener("submit", e => { e.preventDefault(); sendChat(); });
+
+  async function sendChat() {
+    const input = $("#chatInput");
+    const text = input.value.trim();
+    if (!text || state.sending) return;
+    input.value = "";
+    state.chat.push({ role: "user", content: text });
+    state.chat.push({ role: "assistant", content: "", typing: true });
+    state.sending = true; $("#chatSend").disabled = true;
+    renderChat(); renderChatSuggests();
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          division: state.division,
+          messages: state.chat.filter(m => !m.typing).map(m => ({ role: m.role, content: m.content })),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      state.chat = state.chat.filter(m => !m.typing);
+      if (res.ok && data.reply) {
+        state.chat.push({ role: "assistant", content: data.reply });
+      } else {
+        state.chat.push({ role: "assistant", error: true,
+          content: data.message || "Sorry — I couldn't answer that just now. Please try again." });
+      }
+    } catch {
+      state.chat = state.chat.filter(m => !m.typing);
+      state.chat.push({ role: "assistant", error: true, content: "Network error — please check your connection and try again." });
+    } finally {
+      state.sending = false; $("#chatSend").disabled = false;
+      renderChat();
+    }
+  }
+
+  /* ---------- SUGGEST ---------- */
+  $("#suggestForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    const btn = $("#suggestSend"), msg = $("#suggestMsg");
+    const f = e.target;
+    btn.disabled = true; msg.className = "text-sm text-slate-500"; msg.textContent = "Sending…";
+    try {
+      const res = await fetch("/api/suggest", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: f.name.value, email: f.email.value,
+          division: state.division, suggestion: f.suggestion.value, rationale: f.rationale.value,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        msg.className = "text-sm text-green-700 font-medium";
+        msg.textContent = "✓ Thanks! Your suggestion was sent to the league.";
+        f.reset(); $("#suggestDiv").value = R.divisions[state.division].label;
+      } else {
+        msg.className = "text-sm text-amber-700";
+        msg.textContent = data.message || "Couldn't send right now. Please try again.";
+      }
+    } catch {
+      msg.className = "text-sm text-amber-700";
+      msg.textContent = "Network error — please try again.";
+    } finally { btn.disabled = false; }
+  });
+
+  // initial
+  renderChat();
+
+  // Deep-link support: ?division=flag-freshman|flag-older|tackle-sophomore&tab=ask|rules|suggest
+  try {
+    const params = new URLSearchParams(location.search);
+    const d = params.get("division");
+    if (d && R.divisions[d]) {
+      const t = params.get("tab");
+      if (["ask", "rules", "suggest"].includes(t)) state.tab = t;
+      setDivision(d);
+    }
+  } catch (e) { /* ignore */ }
+})();
+</script>
+</body>
+</html>

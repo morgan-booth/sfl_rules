@@ -1,0 +1,9 @@
+.env
+.env.local
+.vercel
+node_modules
+data/raw/*.pdf
+.DS_Store
+# transfer artifacts (safe to delete)
+*.zip
+_to_delete/

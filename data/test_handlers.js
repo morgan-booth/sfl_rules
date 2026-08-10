@@ -68,17 +68,17 @@ async function run() {
   await chat(mockReq("POST", { division: "tackle-sophomore", messages: [{ role: "user", content: "x" }] }), res);
   ok("502 on upstream error", res._status === 502);
 
-  // ---- SUGGEST ----
+  // ---- SUGGEST (Web3Forms) ----
   console.log("suggest.js");
   delete require.cache[require.resolve("../api/suggest.js")];
-  delete process.env.RESEND_API_KEY; delete process.env.SUGGEST_TO;
+  delete process.env.WEB3FORMS_ACCESS_KEY;
   let suggest = require("../api/suggest.js");
 
   res = mockRes();
   await suggest(mockReq("POST", { name: "Coach", suggestion: "x" }), res);
-  ok("503 when email not configured", res._status === 503);
+  ok("503 when access key not configured", res._status === 503);
 
-  process.env.RESEND_API_KEY = "re_test"; process.env.SUGGEST_TO = "rules@sfltx.org";
+  process.env.WEB3FORMS_ACCESS_KEY = "test-access-key";
   res = mockRes();
   await suggest(mockReq("POST", { name: "", suggestion: "" }), res);
   ok("400 when name/suggestion missing", res._status === 400);
@@ -88,14 +88,21 @@ async function run() {
   ok("400 on bad email", res._status === 400);
 
   let sent = null;
-  global.fetch = async (url, opts) => { sent = { url, opts, body: JSON.parse(opts.body) }; return { ok: true, json: async () => ({ id: "email_1" }) }; };
+  global.fetch = async (url, opts) => { sent = { url, opts, body: JSON.parse(opts.body) }; return { ok: true, json: async () => ({ success: true, message: "Email sent" }) }; };
   res = mockRes();
   await suggest(mockReq("POST", { name: "Coach Lee", email: "lee@example.com", division: "flag-freshman", suggestion: "Allow 5-second pass clock reset", rationale: "Fairness" }), res);
   ok("200 sends email", res._status === 200 && res._json.ok === true);
-  ok("emails to configured recipient", sent.body.to.includes("rules@sfltx.org"));
+  ok("posts to web3forms endpoint", sent.url === "https://api.web3forms.com/submit");
+  ok("includes access key", sent.body.access_key === "test-access-key");
   ok("subject names the division", /Freshman/.test(sent.body.subject));
-  ok("sets reply_to to submitter", sent.body.reply_to === "lee@example.com");
-  ok("escapes html in body", sent.body.html.includes("Coach Lee"));
+  ok("sets replyto to submitter", sent.body.replyto === "lee@example.com");
+  ok("carries the suggestion text", sent.body["Suggested rule / change"].includes("5-second"));
+
+  // upstream failure path
+  global.fetch = async () => ({ ok: true, json: async () => ({ success: false, message: "Invalid access key" }) });
+  res = mockRes();
+  await suggest(mockReq("POST", { name: "Coach", division: "flag-older", suggestion: "x" }), res);
+  ok("502 when web3forms rejects", res._status === 502);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

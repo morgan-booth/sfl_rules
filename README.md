@@ -7,7 +7,7 @@ official rulebook:
 - **Ask** — an AI chat that answers rules questions, grounded *only* in the selected
   division's official rule text (via Claude).
 - **Rules** — a browsable, searchable table of contents of the rulebook.
-- **Suggest** — a form that emails a rule suggestion to the league board (via Resend).
+- **Suggest** — a form that emails a rule suggestion to the league board (via Web3Forms).
 
 Entry is a branching picker: **Flag** or **Tackle** → if Flag, **Freshman** (1st–2nd
 grade, special provisions) or **Older** (Sophomore/Junior/Senior). Tackle goes straight
@@ -22,7 +22,7 @@ two serverless functions. No `npm install` required.
 index.html          The whole single-page app (HTML + Tailwind CDN + vanilla JS)
 rules.js            Auto-generated rule data (browsable sections + chat grounding)
 api/chat.js         Serverless fn: Claude chat, holds the Anthropic key server-side
-api/suggest.js      Serverless fn: emails suggestions via Resend
+api/suggest.js      Serverless fn: emails suggestions via Web3Forms
 data/build_rules.py Rebuilds rules.js from the official rulebook text
 data/raw/*.txt      Plain-text extracts of the three PDFs (source of truth)
 vercel.json         Function config
@@ -49,9 +49,7 @@ Copy from `.env.example` into your Vercel project settings:
 |---|---|
 | `ANTHROPIC_API_KEY` | Powers the **Ask** chat. Get one at console.anthropic.com. |
 | `ANTHROPIC_MODEL` | *(optional)* Override the model. Defaults to `claude-sonnet-4-5`. |
-| `RESEND_API_KEY` | Powers the **Suggest** email. Free at resend.com. |
-| `SUGGEST_TO` | Where suggestions are emailed (comma-separate for multiple). |
-| `SUGGEST_FROM` | *(optional)* The "from" address. Use a Resend-verified domain; until then the default `onboarding@resend.dev` test sender works. |
+| `WEB3FORMS_ACCESS_KEY` | Powers the **Suggest** email. Free access key from web3forms.com. Suggestions go to the inbox set on your Web3Forms account. |
 
 The app degrades gracefully: if the chat or email keys aren't set yet, the relevant
 tab shows a friendly "not set up yet" message instead of breaking.

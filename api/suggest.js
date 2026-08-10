@@ -1,7 +1,9 @@
-// Vercel serverless function: emails a rule suggestion to the league via Resend.
-// No dependencies — calls the Resend REST API with built-in fetch.
+// Vercel serverless function: emails a rule suggestion to the league via Web3Forms.
+// No dependencies — calls the Web3Forms REST API with built-in fetch.
+// The access key is kept server-side (env var); the destination inbox is whatever
+// you configured on your Web3Forms account.
 const RULES = require("../rules.js");
-const RESEND_URL = "https://api.resend.com/emails";
+const WEB3FORMS_URL = "https://api.web3forms.com/submit";
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
@@ -15,20 +17,14 @@ function readJson(req) {
   });
 }
 
-function esc(s = "") {
-  return String(s).replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-
 module.exports = async (req, res) => {
   if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
 
-  const TO = process.env.SUGGEST_TO;
-  const FROM = process.env.SUGGEST_FROM || "SFL Rules App <onboarding@resend.dev>";
-  if (!process.env.RESEND_API_KEY || !TO) {
+  const ACCESS_KEY = process.env.WEB3FORMS_ACCESS_KEY;
+  if (!ACCESS_KEY) {
     res.status(503).json({
       error: "not_configured",
-      message: "Suggestions email isn't set up yet — a RESEND_API_KEY and SUGGEST_TO address need to be added to the app's environment variables.",
+      message: "Suggestions email isn't set up yet — a WEB3FORMS_ACCESS_KEY needs to be added to the app's environment variables.",
     });
     return;
   }
@@ -53,44 +49,33 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const html = `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
-      <h2 style="color:#0B2A4A;border-bottom:3px solid #C8102E;padding-bottom:8px">New SFL Rule Suggestion</h2>
-      <p><strong>From:</strong> ${esc(name)}${email ? ` &lt;${esc(email)}&gt;` : ""}</p>
-      <p><strong>Division:</strong> ${esc(divLabel)}</p>
-      <p><strong>Suggested rule / change:</strong></p>
-      <p style="white-space:pre-wrap;background:#f4f6f9;padding:12px;border-radius:8px">${esc(suggestion)}</p>
-      ${rationale ? `<p><strong>Reasoning:</strong></p>
-      <p style="white-space:pre-wrap;background:#f4f6f9;padding:12px;border-radius:8px">${esc(rationale)}</p>` : ""}
-      <p style="color:#888;font-size:12px;margin-top:24px">Submitted via the SFL Rules app.</p>
-    </div>`;
-
-  const text = `New SFL Rule Suggestion\n\nFrom: ${name}${email ? ` <${email}>` : ""}\nDivision: ${divLabel}\n\nSuggested rule / change:\n${suggestion}\n${rationale ? `\nReasoning:\n${rationale}\n` : ""}\n— Submitted via the SFL Rules app.`;
+  // Web3Forms turns these fields into the email body. `subject`, `from_name`,
+  // and `replyto` are recognized special fields; everything else is shown as-is.
+  const payload = {
+    access_key: ACCESS_KEY,
+    subject: `SFL Rule Suggestion — ${divLabel}`,
+    from_name: name || "SFL Rules App",
+    "Submitted by": email ? `${name} <${email}>` : name,
+    "Division": divLabel,
+    "Suggested rule / change": suggestion,
+    "Reasoning": rationale || "(none given)",
+  };
+  if (email) payload.replyto = email;
 
   try {
-    const r = await fetch(RESEND_URL, {
+    const r = await fetch(WEB3FORMS_URL, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from: FROM,
-        to: TO.split(",").map((s) => s.trim()).filter(Boolean),
-        subject: `SFL Rule Suggestion — ${divLabel}`,
-        html,
-        text,
-        ...(email ? { reply_to: email } : {}),
-      }),
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify(payload),
     });
+    const data = await r.json().catch(() => ({}));
 
-    if (!r.ok) {
-      const detail = await r.text();
-      console.error("Resend error", r.status, detail);
-      res.status(502).json({ error: "upstream", message: "Couldn't send the suggestion right now. Please try again." });
-      return;
+    if (r.ok && data.success) {
+      res.status(200).json({ ok: true });
+    } else {
+      console.error("Web3Forms error", r.status, data);
+      res.status(502).json({ error: "upstream", message: (data && data.message) || "Couldn't send the suggestion right now. Please try again." });
     }
-    res.status(200).json({ ok: true });
   } catch (e) {
     console.error("suggest handler failed", e);
     res.status(500).json({ error: "server", message: "Something went wrong sending the suggestion." });

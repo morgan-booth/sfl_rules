@@ -53,6 +53,7 @@ module.exports = async (req, res) => {
     `You answer questions ONLY about the "${div.label}" rulebook, whose full official text is provided below.`,
     ``,
     `Rules:`,
+    `- KEEP ANSWERS SHORT: 1-3 sentences, under ~60 words. Lead with the direct answer. Do not restate the question, add background, or walk through every interval/branch unless the person explicitly asks for more detail.`,
     `- Base every answer strictly on the rulebook text below. Do not invent, assume, or use outside football knowledge.`,
     `- When the rulebook does not cover something, say so plainly and suggest the coach contact the league — do not guess.`,
     `- The rulebook below may begin with DIVISION PROVISIONS (adjustments for this specific division). Those provisions OVERRIDE the general rules wherever they differ — always apply them first. (For ${div.label}, e.g., Freshman has no 4th down, no legal blitzing, no no-run zone, and a five-second pass clock.)`,
@@ -79,7 +80,7 @@ module.exports = async (req, res) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1024,
+        max_tokens: 400,
         system,
         messages: history,
       }),

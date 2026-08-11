@@ -6,9 +6,9 @@ const SFL_RULES = {
     "flag-older": {
       "id": "flag-older",
       "format": "Flag",
-      "label": "Flag Football — Sophomore / Junior / Senior",
+      "label": "Flag Football — Sophomore / Junior",
       "short": "Flag · Older divisions",
-      "intro": "Standard SFL Flag Football rules for Sophomore (3rd–4th), Junior (5th–6th) and Senior (7th–8th) divisions.",
+      "intro": "Standard SFL Flag Football rules for Sophomore (3rd–4th) and Junior (5th–6th) divisions.",
       "groups": [
         {
           "title": "GENERAL PROVISIONS",

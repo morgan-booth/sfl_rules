@@ -104,6 +104,31 @@ async function run() {
   await suggest(mockReq("POST", { name: "Coach", division: "flag-older", suggestion: "x" }), res);
   ok("502 when web3forms rejects", res._status === 502);
 
+  // ---- LOG (usage analytics) ----
+  console.log("log.js");
+  delete require.cache[require.resolve("../api/log.js")];
+  delete process.env.SHEET_WEBHOOK_URL;
+  let log = require("../api/log.js");
+  res = mockRes();
+  await log(mockReq("POST", { type: "chat", detail: "hi" }), res);
+  ok("200 no-op when webhook unset", res._status === 200 && res._json.ok === false);
+
+  process.env.SHEET_WEBHOOK_URL = "https://example.com/exec";
+  delete require.cache[require.resolve("../api/log.js")];
+  log = require("../api/log.js");
+  res = mockRes();
+  await log(mockReq("GET"), res);
+  ok("405 on non-POST", res._status === 405);
+
+  let logged = null;
+  global.fetch = async (url, opts) => { logged = { url, body: JSON.parse(opts.body) }; return { ok: true, text: async () => "{}" }; };
+  res = mockRes();
+  await log(mockReq("POST", { type: "chat", division: "Flag · Freshman", detail: "can the qb run?", detail2: "No, the QB may not run." }), res);
+  ok("200 forwards to webhook", res._status === 200 && res._json.ok === true && logged.url === "https://example.com/exec");
+  ok("payload carries type/division/question/answer",
+    logged.body.type === "chat" && logged.body.division === "Flag · Freshman" && /qb run/.test(logged.body.detail) && /may not run/.test(logged.body.detail2));
+  ok("adds a timestamp", typeof logged.body.ts === "string" && logged.body.ts.length > 10);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 }

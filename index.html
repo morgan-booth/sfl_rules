@@ -142,8 +142,11 @@
     <div id="divIntro" class="mb-3"></div>
     <div class="relative mb-2">
       <input id="ruleSearch" placeholder="Search the rules…"
-        class="w-full rounded-xl border border-slate-300 pl-10 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand/40" />
+        class="w-full rounded-xl border border-slate-300 pl-10 pr-10 py-3 focus:outline-none focus:ring-2 focus:ring-brand/40" />
       <svg class="absolute left-3 top-3.5 w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3m1.3-5.4a6.7 6.7 0 11-13.4 0 6.7 6.7 0 0113.4 0z"/></svg>
+      <button id="ruleSearchClear" type="button" aria-label="Clear search" class="absolute right-2 top-2 p-1.5 rounded-lg text-slate-400 hover:text-brand hover:bg-slate-100 transition" hidden>
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+      </button>
     </div>
     <div id="searchInfo" class="text-sm text-slate-500 mb-2" hidden></div>
     <div id="rulesTOC" class="space-y-3"></div>
@@ -151,7 +154,7 @@
 
   <!-- ---- SUGGEST ---- -->
   <section id="panel-suggest" class="tabpanel" hidden>
-    <div class="max-w-xl">
+    <div>
       <h2 class="font-head text-xl font-bold text-navy mb-4">Suggest a rule</h2>
       <form id="suggestForm" class="space-y-4">
         <div>
@@ -209,6 +212,21 @@
   const state = { division: null, tab: "ask", chat: [], sending: false, pendingFormat: null };
   $("#rulesUpdated").textContent = R.updated || "";
 
+  // Anonymous usage logging (to a Google Sheet via /api/log). No names/emails.
+  function logEvent(type, detail, detail2) {
+    try {
+      const div = state.division ? (R.divisions[state.division] && R.divisions[state.division].short || state.division) : "";
+      const body = JSON.stringify({
+        type,
+        division: div,
+        detail: detail ? String(detail).slice(0, 1000) : "",
+        detail2: detail2 ? String(detail2).slice(0, 3000) : "",
+      });
+      if (navigator.sendBeacon) navigator.sendBeacon("/api/log", new Blob([body], { type: "application/json" }));
+      else fetch("/api/log", { method: "POST", headers: { "content-type": "application/json" }, body, keepalive: true });
+    } catch (e) { /* logging must never break the app */ }
+  }
+
   /* ---------- ENTRY ---------- */
   $$(".pick").forEach(b => b.addEventListener("click", () => {
     const fmt = b.dataset.format;
@@ -231,11 +249,12 @@
     renderRules();
     // reset chat for the new division
     state.chat = []; renderChat();
+    logEvent("division", "entered");
     setTab(state.tab);
   }
 
   /* ---------- TABS ---------- */
-  $$(".tabbtn").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
+  $$(".tabbtn").forEach(b => b.addEventListener("click", () => { logEvent("tab", b.dataset.tab); setTab(b.dataset.tab); }));
   function setTab(tab) {
     state.tab = tab;
     $$(".tabbtn").forEach(b => {
@@ -339,10 +358,19 @@
     });
   }
 
-  let searchT;
+  let searchT, searchLogT, lastLoggedQuery = "";
   $("#ruleSearch").addEventListener("input", e => {
+    $("#ruleSearchClear").hidden = !e.target.value;
     clearTimeout(searchT);
     searchT = setTimeout(() => renderTOC(e.target.value), 120);
+    clearTimeout(searchLogT);
+    searchLogT = setTimeout(() => {
+      const q = e.target.value.trim();
+      if (q.length >= 2 && q.toLowerCase() !== lastLoggedQuery) { lastLoggedQuery = q.toLowerCase(); logEvent("search", q); }
+    }, 900);
+  });
+  $("#ruleSearchClear").addEventListener("click", () => {
+    const s = $("#ruleSearch"); s.value = ""; $("#ruleSearchClear").hidden = true; renderTOC(""); s.focus();
   });
 
   /* ---------- CHAT ---------- */
@@ -434,6 +462,7 @@
       state.chat = state.chat.filter(m => !m.typing);
       if (res.ok && data.reply) {
         state.chat.push({ role: "assistant", content: data.reply });
+        logEvent("chat", text, data.reply);
       } else {
         state.chat.push({ role: "assistant", error: true,
           content: data.message || "Sorry — I couldn't answer that just now. Please try again." });
@@ -512,6 +541,7 @@
       if (res.ok && data.ok) {
         msg.className = "text-sm text-green-700 font-medium";
         msg.textContent = "✓ Thanks! Your suggestion was sent to the league.";
+        logEvent("suggestion", divisionLabel);
         f.reset(); renderSuggestDivs();
       } else {
         msg.className = "text-sm text-amber-700";
@@ -535,7 +565,14 @@
   }
   window.addEventListener("scroll", updateScrollHint, { passive: true });
   window.addEventListener("resize", updateScrollHint);
-  document.addEventListener("toggle", updateScrollHint, true); // any accordion open/close changes height
+  document.addEventListener("toggle", e => {
+    updateScrollHint(); // any accordion open/close changes height
+    const d = e.target;
+    if (d && d.classList && d.classList.contains("rule-sec") && d.open && !$("#ruleSearch").value) {
+      const t = d.querySelector("summary .font-head");
+      logEvent("rule_open", t ? t.textContent.trim() : (d.dataset.title || ""));
+    }
+  }, true);
 
   // initial
   renderChat();

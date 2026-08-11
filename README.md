@@ -50,6 +50,23 @@ Copy from `.env.example` into your Vercel project settings:
 | `ANTHROPIC_API_KEY` | Powers the **Ask** chat. Get one at console.anthropic.com. |
 | `ANTHROPIC_MODEL` | *(optional)* Override the model. Defaults to `claude-sonnet-4-5`. |
 | `WEB3FORMS_ACCESS_KEY` | Powers the **Suggest** email. Free access key from web3forms.com. Suggestions go to the inbox set on your Web3Forms account. |
+| `SHEET_WEBHOOK_URL` | *(optional)* Anonymous usage log to a Google Sheet. Setup in `analytics/apps-script.gs`. If unset, logging is off. |
+
+## Usage logging (optional)
+
+The app can record anonymous usage to a Google Sheet you own — great for seeing what
+people ask so you can plan future changes. It logs **no names or emails**, just:
+event type, division, and text. Each row is `Timestamp | Type | Division | Text | AI response`:
+
+- `chat` — a question and the AI's answer (both in one row)
+- `search` — a rules search query
+- `rule_open` — a rule section someone opened
+- `division` / `tab` — which division/tab they used
+- `suggestion` — a suggestion was sent (and which division(s) it's for)
+
+Setup is ~5 minutes: follow the header comment in `analytics/apps-script.gs`, then paste the
+resulting web-app URL into the `SHEET_WEBHOOK_URL` env var in Vercel. Leave it unset to keep
+logging off.
 
 The app degrades gracefully: if the chat or email keys aren't set yet, the relevant
 tab shows a friendly "not set up yet" message instead of breaking.

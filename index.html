@@ -292,28 +292,66 @@
     } else {
       html += `<p class="text-sm text-slate-600 mt-1">${esc(div.intro)}</p>`;
     }
+    const hasPen = div.groups.some(g => g.sections.some(s => s.ptable));
+    if (hasPen) {
+      html += `<button id="penaltyQuick" type="button" class="mt-3 w-full flex items-center justify-center gap-2 bg-brand/10 hover:bg-brand/15 active:bg-brand/20 text-brand border border-brand/30 rounded-xl px-3 py-2.5 text-sm font-semibold transition">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21v-4m0 0V5a2 2 0 012-2h6l1 2h7a1 1 0 011 1v9a1 1 0 01-1 1h-7l-1-2H5a2 2 0 00-2 2z"/></svg>
+        Penalty tables — offense &amp; defense
+      </button>`;
+    }
     $("#divIntro").innerHTML = html;
+    const pq = $("#penaltyQuick"); if (pq) pq.addEventListener("click", openPenalties);
     renderTOC("");
   }
 
   function sectionHTML(sec) {
-    let body;
-    if (sec.rows && sec.rows.length) {
-      body = `<div class="mt-2 divide-y divide-slate-100 border border-slate-200 rounded-lg overflow-hidden">` +
-        sec.rows.map(r => `<div class="grid grid-cols-5 gap-2 px-3 py-2 text-sm">
-            <div class="col-span-2 font-semibold text-navy">${esc(r.label)}</div>
-            <div class="col-span-3 text-slate-700">${esc(r.value)}</div></div>`).join("") +
-        `</div>`;
-    } else {
-      body = `<div class="rule-body mt-1 text-sm text-slate-700 leading-relaxed">${esc(sec.text)}</div>`;
-    }
-    return `<details class="rule-sec acc border border-slate-200 rounded-lg bg-white" data-title="${esc(sec.title.toLowerCase())}" data-text="${esc(sec.text.toLowerCase())}">
+    let body = "";
+    if (sec.text) body += `<div class="rule-body text-[13px] text-slate-700 leading-relaxed">${esc(sec.text)}</div>`;
+    (sec.tables || []).forEach(t => { body += gridHTML(t); });
+    if (sec.ptable) body += ptableHTML(sec.ptable);
+    return `<details class="rule-sec acc border border-slate-200 rounded-lg bg-white" data-id="${esc(sec.id)}" data-title="${esc(sec.title.toLowerCase())}">
       <summary class="cursor-pointer px-4 py-2.5 flex items-center justify-between gap-3">
         <span class="font-head font-semibold text-navy text-sm">${esc(sec.title)}</span>
         <span class="chev text-slate-400 shrink-0">▾</span>
       </summary>
-      <div class="px-4 pb-4">${body}</div>
+      <div class="px-4 pb-4 space-y-2">${body}</div>
     </details>`;
+  }
+  function gridHTML(t) {
+    const head = t.headers.map(h => `<th class="text-left font-semibold text-navy px-2 py-1 border-b border-slate-200 whitespace-nowrap">${esc(h)}</th>`).join("");
+    const rows = t.rows.map(r => `<tr>${r.map((c, i) => `<td class="px-2 py-1 border-b border-slate-100 align-top ${i === 0 ? "font-semibold text-navy" : "text-slate-700"}">${esc(c)}</td>`).join("")}</tr>`).join("");
+    return `<div class="overflow-x-auto"><table class="text-xs">${head ? `<thead><tr>${head}</tr></thead>` : ""}<tbody>${rows}</tbody></table></div>`;
+  }
+  function ptableHTML(pt) {
+    const notes = (pt.notes || []).map(n => `<div class="text-[11px] text-slate-500 italic">${esc(n)}</div>`).join("");
+    const cards = pt.rows.map(r => `<div class="border border-slate-200 rounded-lg p-2.5">
+        <div class="font-head font-semibold text-navy text-[13px]">${esc(r.foul)}</div>
+        ${r.definition ? `<div class="text-xs text-slate-600 mt-0.5">${esc(r.definition)}</div>` : ""}
+        <div class="text-xs font-semibold text-brand mt-1">${esc(r.enforcement)}</div>
+      </div>`).join("");
+    return `${notes ? `<div class="space-y-1 mb-1">${notes}</div>` : ""}<div class="space-y-2">${cards}</div>`;
+  }
+  function sectionSearchText(s) {
+    let t = s.title + " " + (s.text || "");
+    (s.tables || []).forEach(tb => { t += " " + tb.headers.join(" ") + " " + tb.rows.map(r => r.join(" ")).join(" "); });
+    if (s.ptable) t += " " + s.ptable.rows.map(r => r.foul + " " + r.definition + " " + r.enforcement).join(" ");
+    return t.toLowerCase();
+  }
+  // Quick-access: jump to and open both penalty tables.
+  function openPenalties() {
+    setTab("rules");
+    const s = $("#ruleSearch"); if (s) { s.value = ""; $("#ruleSearchClear").hidden = true; }
+    renderTOC("");
+    let first = null;
+    $$("#rulesTOC .rule-group").forEach(gd => {
+      $$(".rule-sec", gd).forEach(sd => {
+        if (sd.dataset.id === "offensive-penalties" || sd.dataset.id === "defensive-penalties") {
+          gd.open = true; sd.open = true; if (!first) first = sd;
+        }
+      });
+    });
+    if (first) setTimeout(() => first.scrollIntoView({ behavior: "smooth", block: "start" }), 90);
+    logEvent("penalty_quick", "opened");
   }
 
   function renderTOC(q) {
@@ -323,7 +361,7 @@
     // Two-level accordion: category bars (collapsed) → sections → rule text.
     const html = div.groups.map(g => {
       const matched = g.sections.filter(s => {
-        const hit = !query || s.title.toLowerCase().includes(query) || s.text.toLowerCase().includes(query);
+        const hit = !query || sectionSearchText(s).includes(query);
         if (hit && query) shown++;
         return hit;
       });

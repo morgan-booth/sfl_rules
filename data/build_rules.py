@@ -1,151 +1,156 @@
 #!/usr/bin/env python3
-"""Parse the SFL rulebook plain-text extracts into structured JSON for the app.
-Source of truth: data/raw/*.txt (from pdftotext -layout). Output: public/rules.js
-Both the lookup (browsable sections) and the chat grounding (fullText) derive from
-the same parsed content so nothing drifts from the official PDFs."""
+"""Build structured rules JSON for the SFL app.
+
+Flag: parsed from the official DOCX (data/raw/flag.docx) — 1x1 tables are the top
+categories, Heading 2 are the sections, and content tables (grade levels, field
+dimensions, penalty tables) are captured as structured tables.
+Tackle: parsed from data/raw/tackle.txt (unchanged Sophomore 6-man rules).
+
+Output: rules.js (dual export for the browser + the serverless functions).
+Both the lookup and the chat grounding derive from the same parsed content.
+"""
 import re, json, os
+import docx
+from docx.oxml.ns import qn
 
-RAW = os.path.join(os.path.dirname(__file__), "raw")
-OUT = os.path.join(os.path.dirname(__file__), "..", "rules.js")
+HERE = os.path.dirname(__file__)
+RAW = os.path.join(HERE, "raw")
+OUT = os.path.join(HERE, "..", "rules.js")
+UPDATED = "As of August 26, 2026"
 
-def norm(s):
-    return re.sub(r"\s+", " ", s.strip()).upper()
+def norm(s): return re.sub(r"\s+", " ", (s or "").strip()).upper()
+def slug(s): return re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")
+def collapse(t): return re.sub(r"\n{3,}", "\n\n", (t or "")).strip()
 
-def slug(s):
-    return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
+TOP_CATEGORIES = {
+    "GENERAL PROVISIONS", "SPORTSMANSHIP AND CONDUCT", "GENERAL GAME PROVISIONS",
+    "GAME PLAY", "OFFENSE", "DEFENSE", "OFFICIALS AND PENALTIES",
+    "SUMMARY FRESHMAN DIVISION PROVISIONS",
+}
 
-# ---------- FLAG ----------
-FLAG_HEADERS = [
-    (1, "GENERAL PROVISIONS"),
-    (2, "ROSTERS AND ELIGIBILITY"), (2, "COACHES"),
-    (2, "FIELD DIMENSIONS AND EQUIPMENT"), (2, "TEAM FORMATION"),
-    (2, "NO COMMUNICATION DEVICES"), (2, "DRONE USE PROHIBITED"),
-    (1, "SPORTSMANSHIP AND CONDUCT"),
-    (2, "PLAYER CONDUCT"), (2, "OFFENSIVE LANGUAGE"),
-    (2, "COACH AND SPECTATOR CONDUCT"), (2, "FIELD SAFETY"),
-    (2, "PARTICIPATION RULE"), (2, "COACH AND PARENT PARTICIPATION"),
-    (2, "SIDELINE ASSIGNMENTS"), (2, "PLAYOFF SEEDINGS"),
-    (1, "GENERAL GAME PROVISIONS"),
-    (2, "START OF GAME"), (2, "POSSESSION AND CHANGE OF POSSESSION"),
-    (2, "NO-RUN ZONE"), (2, "GAME CLOCK"), (2, "DELAY OF GAME"),
-    (2, "TIMEOUTS"), (2, "INJURY STOPPAGE"), (2, "OVERTIME"),
-    (1, "GAME PLAY"),
-    (2, "BALL SPOT"), (2, "LIVE AND DEAD BALL"), (2, "INADVERTENT WHISTLE"),
-    (2, "PRE-SNAP DEFENSE"), (2, "OFFENSIVE PLAYS"), (2, "SCORING"),
-    (2, "SAFETY"), (2, "MERCY RULE"),
-    (1, "OFFENSE"),
-    (2, "OFFENSIVE FORMATION"), (2, "MOTION"), (2, "RUNNING"), (2, "PASSING"),
-    (1, "DEFENSE"),
-    (2, "BLITZER AND RUSHER"), (2, "FLAG PULLING"),
-    (1, "OFFICIALS AND PENALTIES"),
-    (2, "OFFICIALS"), (2, "GENERAL PENALTY PROVISIONS"),
-    (2, "DEFENSIVE SPOT PENALTIES"), (2, "DEFENSIVE LINE OF SCRIMMAGE PENALTIES"),
-    (2, "OFFENSIVE SPOT PENALTIES"), (2, "OFFENSIVE LINE OF SCRIMMAGE PENALTIES"),
-    (1, "SUMMARY FRESHMAN DIVISION PROVISIONS"),
-]
+# ---------------- FLAG (docx) ----------------
+def cells_of(t):
+    return [[c.text.strip() for c in row.cells] for row in t.rows]
 
-DROP_TITLES = {"FLAG FOOTBALL", "OFFICIAL RULEBOOK", "2026",
-               "AS OF AUGUST 1, 2026", "TABLE OF CONTENTS", "CONTENTS"}
+def all_same(row):
+    vals = [c for c in row if c != ""]
+    return len(set(vals)) == 1 and len(vals) >= 2
 
-def clean_lines(text):
-    out = []
-    for ln in text.split("\n"):
-        ln = ln.replace("\f", "")
-        s = ln.strip()
-        if not s:
-            out.append("")
+def build_ptable(cells):
+    """3-col penalty table -> {notes:[...], rows:[{foul,definition,enforcement}]}"""
+    notes, rows = [], []
+    for i, row in enumerate(cells):
+        if i == 0:
+            continue  # header row (FOULS | DEFINITION | ENFORCEMENT)
+        if all_same(row):
+            if row[0] and row[0] not in notes:
+                notes.append(row[0])
             continue
-        if re.fullmatch(r"\d{1,3}", s):        # bare page-number footer
+        foul = row[0].strip()
+        if not foul:
             continue
-        if re.search(r"\.{2,}", s):            # TOC dotted leaders
-            continue
-        if norm(s) in DROP_TITLES:
-            continue
-        out.append(ln.rstrip())
-    return out
+        rows.append({
+            "foul": foul,
+            "definition": (row[1] if len(row) > 1 else "").strip(),
+            "enforcement": (row[2] if len(row) > 2 else "").strip(),
+        })
+    return {"notes": notes, "rows": rows}
 
-def collapse_blanks(txt):
-    txt = re.sub(r"\n{3,}", "\n\n", txt).strip()
-    return txt
-
-def parse_penalty_rows(text):
-    """Turn a space-aligned two-column penalty table into {label,value} rows."""
-    rows = []
-    for ln in text.split("\n"):
-        if not ln.strip():
-            continue
-        parts = re.split(r"\s{2,}", ln.strip())
-        leading_ws = len(ln) - len(ln.lstrip())
-        if len(parts) >= 2 and leading_ws < 20 and parts[0] and not parts[0].startswith("*"):
-            rows.append({"label": parts[0].strip(),
-                         "value": " ".join(p.strip() for p in parts[1:]).strip()})
-        elif rows:  # continuation / wrapped line
-            rows[-1]["value"] = (rows[-1]["value"] + " " + ln.strip()).strip()
-    return rows
+def build_grid(cells):
+    """Generic reference table -> {headers, rows}."""
+    return {"headers": cells[0], "rows": cells[1:]}
 
 def parse_flag():
-    text = open(os.path.join(RAW, "flag.txt")).read()
-    lines = clean_lines(text)
-    hdr_norm = [norm(h) for _, h in FLAG_HEADERS]
-    ptr = 0
-    groups, cur_group, cur_sec = [], None, None
-    buf = []
+    d = docx.Document(os.path.join(RAW, "flag.docx"))
+    pmap = {p._p: p for p in d.paragraphs}
+    tmap = {t._tbl: t for t in d.tables}
+    groups, cur_group, cur_sec, buf = [], None, None, []
+    fresh_prov = []
+
     def flush():
         nonlocal buf, cur_sec
         if cur_sec is not None:
-            cur_sec["text"] = collapse_blanks("\n".join(buf))
+            cur_sec["text"] = collapse("\n".join(buf))
         buf = []
-    for ln in lines:
-        s = norm(ln)
-        if ptr < len(FLAG_HEADERS) and s == hdr_norm[ptr]:
-            flush()
-            lvl, title = FLAG_HEADERS[ptr]
-            ptr += 1
-            if lvl == 1:
-                cur_group = {"title": title, "id": slug(title), "sections": []}
+
+    for child in d.element.body.iterchildren():
+        if child.tag == qn("w:p"):
+            p = pmap.get(child)
+            if p is None:
+                continue
+            txt = p.text.strip()
+            if not txt:
+                continue
+            style = p.style.name if p.style else ""
+            if style == "Heading 2":
+                flush()
+                cur_sec = {"title": txt, "id": slug(txt), "text": ""}
+                (cur_group or {}).get("sections", []).append(cur_sec)
+                continue
+            buf.append(("• " + txt) if "List" in style else txt)
+        elif child.tag == qn("w:tbl"):
+            t = tmap.get(child)
+            if t is None:
+                continue
+            cells = cells_of(t)
+            # 1x1 = category divider (or TABLE OF CONTENTS)
+            if len(cells) == 1 and len(cells[0]) == 1:
+                label = norm(cells[0][0])
+                if label == "TABLE OF CONTENTS":
+                    continue
+                flush()
+                cur_group = {"title": label, "id": slug(label), "sections": []}
                 groups.append(cur_group)
                 cur_sec = None
-            else:
-                cur_sec = {"title": title, "id": slug(title), "text": ""}
-                cur_group["sections"].append(cur_sec)
-            continue
-        if cur_sec is not None:
-            buf.append(ln)
+                continue
+            # content table
+            title = norm(cur_sec["title"]) if cur_sec else ""
+            if title in ("OFFENSIVE PENALTIES", "DEFENSIVE PENALTIES"):
+                flush()
+                cur_sec["ptable"] = build_ptable(cells)
+            elif cur_group and cur_group["title"] == "SUMMARY FRESHMAN DIVISION PROVISIONS":
+                for row in cells:
+                    if len(row) >= 2 and row[0].strip():
+                        fresh_prov.append({"label": row[0].strip(), "text": row[1].strip()})
+            elif cur_sec is not None:
+                flush()
+                cur_sec.setdefault("tables", []).append(build_grid(cells))
     flush()
-    # drop empty group (the freshman-summary divider carries no sub-sections)
+    # the freshman-summary category carries no sub-sections
     groups = [g for g in groups if g["sections"]]
-    # structure the penalty tables into rows for clean rendering
-    for g in groups:
-        for sec in g["sections"]:
-            if sec["id"].endswith("penalties"):
-                sec["rows"] = parse_penalty_rows(sec["text"])
-    # full text for chat grounding
-    full = []
-    for g in groups:
-        full.append(g["title"])
-        for sec in g["sections"]:
-            full.append(sec["title"])
-            if sec["text"]:
-                full.append(sec["text"])
-    return groups, collapse_blanks("\n\n".join(full))
+    return groups, fresh_prov
 
-# ---------- TACKLE ----------
+def flag_fulltext(groups):
+    out = []
+    for g in groups:
+        out.append(g["title"])
+        for s in g["sections"]:
+            out.append(s["title"])
+            if s.get("text"):
+                out.append(s["text"])
+            for tbl in s.get("tables", []):
+                out.append(" | ".join(tbl["headers"]))
+                for r in tbl["rows"]:
+                    out.append(" | ".join(r))
+            pt = s.get("ptable")
+            if pt:
+                for n in pt["notes"]:
+                    out.append(n)
+                for r in pt["rows"]:
+                    out.append(f"{r['foul']}: {r['definition']} — {r['enforcement']}")
+    return collapse("\n\n".join(out))
+
+# ---------------- TACKLE (txt) ----------------
 TACKLE_HEADERS = [
-    "GAME PLAY:",
-    "The Clock will be stopped for the following reasons:",
-    "SPECIAL TEAMS:",
-    "POINT SYSTEM:",
-    "SUBSTITUTION / PLAY RULE:",
-    "REQUIRED and PROHIBITED EQUIPMENT:",
-    "SPORTSMANSHIP: ZERO-TOLERANCE POLICY",
-    "Safety/Weight Considerations:",
-    "Field Dimensions:",
+    "GAME PLAY:", "The Clock will be stopped for the following reasons:",
+    "SPECIAL TEAMS:", "POINT SYSTEM:", "SUBSTITUTION / PLAY RULE:",
+    "REQUIRED and PROHIBITED EQUIPMENT:", "SPORTSMANSHIP: ZERO-TOLERANCE POLICY",
+    "Safety/Weight Considerations:", "Field Dimensions:",
 ]
 TACKLE_TITLES = {
     "GAME PLAY:": "Game Play",
     "The Clock will be stopped for the following reasons:": "Clock Stoppages",
-    "SPECIAL TEAMS:": "Special Teams",
-    "POINT SYSTEM:": "Point System",
+    "SPECIAL TEAMS:": "Special Teams", "POINT SYSTEM:": "Point System",
     "SUBSTITUTION / PLAY RULE:": "Substitution / Play Rule",
     "REQUIRED and PROHIBITED EQUIPMENT:": "Required & Prohibited Equipment",
     "SPORTSMANSHIP: ZERO-TOLERANCE POLICY": "Sportsmanship: Zero-Tolerance Policy",
@@ -155,13 +160,12 @@ TACKLE_TITLES = {
 
 def parse_tackle():
     text = open(os.path.join(RAW, "tackle.txt")).read()
-    hdr_norm = {norm(h): h for h in TACKLE_HEADERS}
-    sections, cur = [], None
-    buf = []
+    hdr = {norm(h): h for h in TACKLE_HEADERS}
+    sections, cur, buf = [], None, []
     def flush():
         nonlocal buf, cur
         if cur is not None:
-            cur["text"] = collapse_blanks("\n".join(buf))
+            cur["text"] = collapse("\n".join(buf))
         buf = []
     for ln in text.split("\n"):
         ln = ln.replace("\f", "")
@@ -171,11 +175,9 @@ def parse_tackle():
             continue
         if s == "2025 Season" or re.fullmatch(r"\d{1,3}", s):
             continue
-        if norm(s) in hdr_norm:
+        if norm(s) in hdr:
             flush()
-            raw = hdr_norm[norm(s)]
-            title = TACKLE_TITLES[raw]
-            cur = {"title": title, "id": slug(title), "text": ""}
+            cur = {"title": TACKLE_TITLES[hdr[norm(s)]], "id": slug(TACKLE_TITLES[hdr[norm(s)]]), "text": ""}
             sections.append(cur)
             continue
         if cur is not None:
@@ -186,84 +188,73 @@ def parse_tackle():
             sec["text"] = ("Field dimensions for the Sophomore 6-man tackle field are set by the "
                            "league at the field each game day. Beyond the unique rules in this document, "
                            "game play is governed by TAPPS 6 Man and NCAA football rules.")
-    groups = [{"title": "SOPHOMORE 6-MAN TACKLE RULES", "id": "tackle",
-               "sections": sections}]
+    groups = [{"title": "SOPHOMORE 6-MAN TACKLE RULES", "id": "tackle", "sections": sections}]
     full = []
     for sec in sections:
         full.append(sec["title"])
         if sec["text"]:
             full.append(sec["text"])
-    return groups, collapse_blanks("\n\n".join(full))
-
-# ---------- FRESHMAN PROVISIONS ----------
-FRESHMAN_PROVISIONS = [
-    ("Field Width", "40 yards (vs 53 1/3 yards)"),
-    ("Defensive Coach on Field", "Allowed only for Freshman."),
-    ("Delay of Game Penalty", "More lenient during the regular season."),
-    ("No-Run Zone", "Eliminated."),
-    ("Illegal Forward Pass", "If the quarterback is throwing the ball away under pressure and the ball is not in the vicinity of a receiver, it is not a penalty as long as the quarterback made a good-faith attempt to throw the ball in the vicinity of a receiver."),
-    ("Legal Blitzing", "Not allowed."),
-    ("Passing Clock", "Five-second clock (due to no blitzing allowed)."),
-]
+    return groups, collapse("\n\n".join(full))
 
 def main():
-    flag_groups, flag_full = parse_flag()
+    flag_groups, fresh_prov = parse_flag()
+    flag_full = flag_fulltext(flag_groups)
     tackle_groups, tackle_full = parse_tackle()
 
+    # Freshman override retained from an earlier league instruction (Jeff): no 4th down.
+    # (Not in the official summary table — flagged separately for confirmation.)
+    fresh_prov = fresh_prov + [{
+        "label": "No 4th Down",
+        "text": ("There is no 4th down in the Freshman Division. Because the offense does not get a "
+                 "fourth down, a loss-of-down penalty (such as a false start) on third down ends the "
+                 "offense's possession — effectively a turnover on downs."),
+    }]
     prov_text = "FRESHMAN DIVISION PROVISIONS (adjustments to the flag rules)\n\n" + \
-        "\n".join(f"- {k}: {v}" for k, v in FRESHMAN_PROVISIONS)
+        "\n".join(f"- {p['label']}: {p['text']}" for p in fresh_prov)
 
     data = {
-        "updated": "As of August 1, 2026",
+        "updated": UPDATED,
         "divisions": {
             "flag-older": {
-                "id": "flag-older",
-                "format": "Flag",
-                "label": "Flag Football — Sophomore / Junior / Senior",
+                "id": "flag-older", "format": "Flag",
+                "label": "Flag Football — Sophomore / Junior",
                 "short": "Flag · Older divisions",
-                "intro": "Standard SFL Flag Football rules for Sophomore (3rd–4th), Junior (5th–6th) and Senior (7th–8th) divisions.",
-                "groups": flag_groups,
-                "fullText": flag_full,
+                "intro": "Standard SFL Flag Football rules for Sophomore (3rd–4th) and Junior (5th–6th) divisions.",
+                "groups": flag_groups, "fullText": flag_full,
             },
             "flag-freshman": {
-                "id": "flag-freshman",
-                "format": "Flag",
+                "id": "flag-freshman", "format": "Flag",
                 "label": "Flag Football — Freshman (1st–2nd grade)",
                 "short": "Flag · Freshman",
                 "intro": "SFL Flag Football rules with the Freshman Division adjustments applied. The provisions below override the standard rules where they differ.",
-                "provisions": [{"label": k, "text": v} for k, v in FRESHMAN_PROVISIONS],
-                "groups": flag_groups,
-                "fullText": prov_text + "\n\n" + flag_full,
+                "provisions": fresh_prov,
+                "groups": flag_groups, "fullText": prov_text + "\n\n" + flag_full,
             },
             "tackle-sophomore": {
-                "id": "tackle-sophomore",
-                "format": "Tackle",
+                "id": "tackle-sophomore", "format": "Tackle",
                 "label": "Sophomore 6-Man Tackle",
                 "short": "Tackle · Sophomore",
                 "intro": "SFL Sophomore 6-Man Tackle Football rules (2025). Beyond the unique rules here, play is governed by TAPPS 6 Man and NCAA rules; conduct follows the SFL Flag Official Rulebook.",
-                "groups": tackle_groups,
-                "fullText": tackle_full,
+                "groups": tackle_groups, "fullText": tackle_full,
             },
         },
         "order": ["flag-freshman", "flag-older", "tackle-sophomore"],
     }
 
-    js = ("/* AUTO-GENERATED from the official SFL rulebook PDFs by data/build_rules.py.\n"
+    js = ("/* AUTO-GENERATED from the official SFL rulebooks by data/build_rules.py.\n"
           "   Do not edit by hand — re-run the builder when a rulebook changes. */\n"
           "const SFL_RULES = " + json.dumps(data, ensure_ascii=False, indent=2) + ";\n"
           "if (typeof module !== 'undefined' && module.exports) module.exports = SFL_RULES;\n"
           "if (typeof window !== 'undefined') window.SFL_RULES = SFL_RULES;\n")
-    os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as f:
         f.write(js)
 
-    # quick report
-    print("FLAG groups:", len(flag_groups),
-          "sections:", sum(len(g["sections"]) for g in flag_groups))
+    print("FLAG groups:", len(flag_groups))
     for g in flag_groups:
         print("  -", g["title"], "->", [s["id"] for s in g["sections"]])
-    print("TACKLE sections:", [s["id"] for s in tackle_groups[0]["sections"]])
-    print("flag_full chars:", len(flag_full), "| tackle_full chars:", len(tackle_full))
+    pen = [s for g in flag_groups for s in g["sections"] if s.get("ptable")]
+    print("penalty tables:", [(s["id"], len(s["ptable"]["rows"])) for s in pen])
+    print("freshman provisions:", [p["label"] for p in fresh_prov])
     print("wrote", os.path.abspath(OUT))
 
 if __name__ == "__main__":

@@ -7,3 +7,5 @@ data/raw/*.pdf
 # transfer artifacts (safe to delete)
 *.zip
 _to_delete/
+
+_gitlock_trash/
